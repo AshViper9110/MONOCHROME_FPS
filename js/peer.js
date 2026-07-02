@@ -38,6 +38,7 @@ export class PeerManager {
     }
 
     async init(customId) {
+        this._isHost = !!customId;
         return new Promise((resolve, reject) => {
             try {
                 this.peer = new Peer(customId || undefined, PEER_CONFIG);
@@ -80,7 +81,6 @@ export class PeerManager {
 
     _handleConnection(conn) {
         this.connection = conn;
-        this._isHost = false;
 
         conn.on('open', () => {
             this.state = ConnectionState.CONNECTED;
@@ -111,7 +111,6 @@ export class PeerManager {
         }
 
         this.remotePeerId = remoteId;
-        this._isHost = true;
         this.state = ConnectionState.CONNECTING;
 
         const conn = this.peer.connect(remoteId, {

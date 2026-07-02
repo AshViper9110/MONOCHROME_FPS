@@ -41,6 +41,7 @@ export class Game {
         this._frameCount = 0;
         this._fpsTimer = 0;
         this._initialized = false;
+        this._lastPhase = null;
         this.roomCodeManager = new RoomCodeManager();
     }
 
@@ -142,15 +143,13 @@ export class Game {
                         this.remotePlayer.equipWeapon(this.remotePlayer.weapons[0]);
                     }
                     this.ui.updateWeaponStatus('Opponent has selected a weapon!');
-                    if (this.weaponConfirmed) {
-                        this._beginMatch();
-                    }
+                    console.log('Remote weapon locked');
+                    this._checkBothLocked();
                 }
             },
             onSetStart: (data) => {
-                this._spawnPlayers();
-                this.gamemode.currentSet = data.setNumber;
-                this.gamemode.startSet();
+                console.log('Received SET_START, starting round');
+                this._startRound(data.setNumber);
             },
             onRemoteFire: (data) => {
                 if (this.remotePlayer && this.effects) {
@@ -254,21 +253,34 @@ export class Game {
             this.ui.updateWeaponStatus('Weapon locked! Waiting for opponent...');
         }
 
-        if (this.remotePlayer && this.remotePlayer.weapon) {
-            this._beginMatch();
-        }
+        console.log('Local weapon locked');
+        this._checkBothLocked();
+    }
+
+    _checkBothLocked() {
+        if (!this.weaponConfirmed) return;
+        if (!this.remotePlayer || !this.remotePlayer.weapon) return;
+        if (!this.network || !this.network.peer || !this.network.peer.isHost()) return;
+
+        console.log('Both locked in. Host starting match...');
+        this._beginMatch();
     }
 
     _beginMatch() {
         if (!this.gamemode) return;
-        if (this.ui) {
-            this.ui.showHUD();
-        }
+        console.log('Host sending SET_START');
         if (this.network && this.network.peer) {
-            if (this.network.peer.isHost()) {
-                this.network.sendSetStart(0);
-            }
+            this.network.sendSetStart(0);
         }
+        this._startRound();
+    }
+
+    _startRound(setNumber = 0) {
+        if (!this.gamemode) return;
+        console.log('Starting round');
+        this.ui.showHUD();
+        this.ui.hideScreen('weaponSelect');
+        this.gamemode.currentSet = setNumber;
         this.gamemode.startSet();
         this._spawnPlayers();
     }
@@ -361,6 +373,7 @@ export class Game {
             this.network.update(dt, this.localPlayer);
         }
 
+        this._updatePhaseUI();
         this._updateUI(dt);
         this.input.endFrame();
     }
@@ -515,6 +528,17 @@ export class Game {
             this.ui.showScreen('title');
         }
         this._loop(this._lastTime);
+    }
+
+    _updatePhaseUI() {
+        if (!this.gamemode) return;
+        const phase = this.gamemode.phase;
+        if (phase === this._lastPhase) return;
+        this._lastPhase = phase;
+
+        if (phase !== GamePhase.WEAPON_SELECT) {
+            this.ui.hideScreen('weaponSelect');
+        }
     }
 
     _updateUI(dt) {

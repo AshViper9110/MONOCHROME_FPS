@@ -238,6 +238,12 @@ export class UIManager {
         }
     }
 
+    hideScreen(screenId) {
+        if (this.screens[screenId]) {
+            this.screens[screenId].style.display = 'none';
+        }
+    }
+
     showHUD() {
         this.screens.hud.style.display = 'block';
     }
