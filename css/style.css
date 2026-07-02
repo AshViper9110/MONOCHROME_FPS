@@ -541,6 +541,61 @@ html, body {
     animation: pulse 2s ease-in-out infinite;
 }
 
+.room-code-display {
+    margin-bottom: 30px;
+}
+
+.room-code-label {
+    font-size: 12px;
+    color: #888888;
+    letter-spacing: 3px;
+    margin-bottom: 12px;
+}
+
+.room-code-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.room-code-value {
+    font-size: 48px;
+    letter-spacing: 12px;
+    color: #ffffff;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+}
+
+.copy-btn {
+    background: transparent;
+    border: 1px solid #555555;
+    color: #aaaaaa;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+}
+
+.copy-btn:hover {
+    border-color: #ffffff;
+    color: #ffffff;
+}
+
+.copy-feedback {
+    font-size: 11px;
+    color: #ffffff;
+    letter-spacing: 2px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+.room-code-input {
+    letter-spacing: 8px;
+    font-size: 20px !important;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 0.3; }
     50% { opacity: 1; }

@@ -421,6 +421,7 @@ export class Renderer {
     }
 
     renderHUD(player, otherPlayers, gameMode, networkStats) {
+        if (!player) return;
         const ctx = this.ctx;
         const w = this.width;
         const h = this.height;
@@ -439,12 +440,15 @@ export class Renderer {
     }
 
     _drawHealthBar(player) {
+        if (!player) return;
         const ctx = this.ctx;
         const barWidth = 200;
         const barHeight = 20;
         const x = 20;
         const y = this.height - 50;
-        const healthPercent = player.health / player.maxHealth;
+        const health = player.health ?? 100;
+        const maxHealth = player.maxHealth ?? 100;
+        const healthPercent = maxHealth > 0 ? health / maxHealth : 1;
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
@@ -459,7 +463,7 @@ export class Renderer {
         ctx.fillStyle = '#ffffff';
         ctx.font = '12px monospace';
         ctx.textAlign = 'left';
-        ctx.fillText(`HP ${Math.ceil(player.health)}`, x + 5, y + 15);
+        ctx.fillText(`HP ${Math.ceil(health)}`, x + 5, y + 15);
     }
 
     _drawAmmo(player) {
@@ -484,17 +488,20 @@ export class Renderer {
     _drawSetScore(player, gameMode) {
         if (!gameMode) return;
         if (!gameMode.setsWon) return;
+        if (!gameMode.playerIdOrder || gameMode.playerIdOrder.length < 2) return;
         const ctx = this.ctx;
         const w = this.width;
 
-        const setsText = `${gameMode.setsWon[0]} - ${gameMode.setsWon[1]}`;
+        const setsWon = gameMode.setsWon ?? [0, 0];
+        const setsText = `${setsWon[0] ?? 0} - ${setsWon[1] ?? 0}`;
         ctx.fillStyle = '#ffffff';
         ctx.font = '32px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(setsText, w / 2, 40);
 
+        const currentSet = gameMode.currentSet ?? 0;
         ctx.font = '12px monospace';
-        ctx.fillText(`Set ${gameMode.currentSet + 1}`, w / 2, 58);
+        ctx.fillText(`Set ${currentSet + 1}`, w / 2, 58);
     }
 
     _drawNetworkStats(stats) {
@@ -546,6 +553,7 @@ export class Renderer {
     }
 
     renderWinScreen(player, gameMode) {
+        if (!player || !gameMode) return;
         const ctx = this.ctx;
         const w = this.width;
         const h = this.height;
@@ -560,15 +568,17 @@ export class Renderer {
         const isWinner = gameMode.winner === player.id;
         ctx.fillText(isWinner ? 'VICTORY' : 'DEFEAT', w / 2, h / 2 - 40);
 
+        const setsWon = gameMode.setsWon ?? [0, 0];
         ctx.font = '18px monospace';
         ctx.fillStyle = '#aaaaaa';
-        ctx.fillText(`Final Score: ${gameMode.setsWon[0]} - ${gameMode.setsWon[1]}`, w / 2, h / 2 + 20);
+        ctx.fillText(`Final Score: ${setsWon[0]} - ${setsWon[1]}`, w / 2, h / 2 + 20);
 
         ctx.font = '14px monospace';
         ctx.fillText('Press SPACE to return to menu', w / 2, h / 2 + 60);
     }
 
     renderSetTransition(setNumber) {
+        if (setNumber == null) return;
         const ctx = this.ctx;
         const w = this.width;
         const h = this.height;
@@ -587,17 +597,22 @@ export class Renderer {
     }
 
     renderKillFeed(kills) {
+        if (!kills || kills.length === 0) return;
         const ctx = this.ctx;
         const startY = 80;
 
         ctx.font = '12px monospace';
         ctx.textAlign = 'left';
 
-        for (let i = Math.max(0, kills.length - 5); i < kills.length; i++) {
+        const maxKills = Math.min(kills.length, 5);
+        const startIdx = Math.max(0, kills.length - 5);
+        const killCount = Math.min(kills.length - startIdx, 5);
+        for (let i = startIdx; i < startIdx + killCount; i++) {
             const kill = kills[i];
-            const y = startY + (i - Math.max(0, kills.length - 5)) * 18;
-            ctx.fillStyle = `rgba(255, 255, 255, ${1 - (kills.length - i) * 0.15})`;
-            ctx.fillText(`${kill.killer} → ${kill.victim}`, 20, y);
+            if (!kill) continue;
+            const y = startY + (i - startIdx) * 18;
+            ctx.fillStyle = `rgba(255, 255, 255, ${1 - (killCount - (i - startIdx)) * 0.15})`;
+            ctx.fillText(`${kill.killer ?? '?'} → ${kill.victim ?? '?'}`, 20, y);
         }
     }
 }

@@ -30,7 +30,7 @@ export class UIManager {
                     <button class="menu-btn" id="btn-join">JOIN GAME</button>
                 </div>
                 <div class="join-section" id="join-section" style="display:none">
-                    <input type="text" class="input-field" id="peer-id-input" placeholder="Enter Peer ID..." maxlength="40">
+                    <input type="text" class="input-field room-code-input" id="room-code-input" placeholder="0000" maxlength="4" inputmode="numeric" pattern="[0-9]*">
                     <button class="menu-btn small" id="btn-connect">CONNECT</button>
                 </div>
                 <div class="name-section">
@@ -42,6 +42,11 @@ export class UIManager {
         this.container.appendChild(screen);
         this.screens.title = screen;
 
+        const roomCodeInput = screen.querySelector('#room-code-input');
+        roomCodeInput.addEventListener('input', () => {
+            roomCodeInput.value = roomCodeInput.value.replace(/\D/g, '');
+        });
+
         screen.querySelector('#btn-create').addEventListener('click', () => {
             const name = screen.querySelector('#name-input').value.trim() || 'Player';
             this.game.setPlayerName(name);
@@ -50,14 +55,21 @@ export class UIManager {
 
         screen.querySelector('#btn-join').addEventListener('click', () => {
             document.getElementById('join-section').style.display = 'block';
+            roomCodeInput.focus();
         });
 
         screen.querySelector('#btn-connect').addEventListener('click', () => {
-            const peerId = screen.querySelector('#peer-id-input').value.trim();
+            const roomCode = roomCodeInput.value.trim();
             const name = screen.querySelector('#name-input').value.trim() || 'Player';
-            if (peerId) {
+            if (roomCode.length === 4) {
                 this.game.setPlayerName(name);
-                this.game.joinGame(peerId);
+                this.game.joinGame(roomCode);
+            }
+        });
+
+        roomCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                screen.querySelector('#btn-connect').click();
             }
         });
     }
@@ -70,7 +82,14 @@ export class UIManager {
             <div class="lobby-content">
                 <h2>LOBBY</h2>
                 <div class="lobby-info">
-                    <p class="peer-id-display">Your ID: <span id="peer-id-display"></span></p>
+                    <div class="room-code-display" id="room-code-display" style="display:none">
+                        <p class="room-code-label">Room Code</p>
+                        <div class="room-code-row">
+                            <span class="room-code-value" id="room-code-value"></span>
+                            <button class="copy-btn" id="btn-copy-code">📋 Copy</button>
+                        </div>
+                        <p class="copy-feedback" id="copy-feedback"></p>
+                    </div>
                     <p class="lobby-status">Waiting for opponent...</p>
                 </div>
                 <div class="lobby-players">
@@ -228,9 +247,19 @@ export class UIManager {
         this.screens.hud.style.display = 'none';
     }
 
-    updateLobby(peerId, players) {
-        const display = document.getElementById('peer-id-display');
-        if (display) display.textContent = peerId || '...';
+    updateLobby(roomCode, players) {
+        const roomCodeDisplay = document.getElementById('room-code-display');
+        const roomCodeValue = document.getElementById('room-code-value');
+        if (roomCode && roomCodeDisplay) {
+            roomCodeDisplay.style.display = 'block';
+            if (roomCodeValue) roomCodeValue.textContent = roomCode;
+
+            const copyBtn = document.getElementById('btn-copy-code');
+            const feedback = document.getElementById('copy-feedback');
+            if (copyBtn) {
+                copyBtn.onclick = () => this._copyToClipboard(roomCode, copyBtn, feedback);
+            }
+        }
 
         if (players) {
             for (let i = 0; i < 2; i++) {
@@ -245,6 +274,44 @@ export class UIManager {
                 }
             }
         }
+    }
+
+    _copyToClipboard(text, button, feedbackEl) {
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                this._showCopiedFeedback(button, feedbackEl);
+            }).catch(() => {
+                this._fallbackCopy(text, button, feedbackEl);
+            });
+        } else {
+            this._fallbackCopy(text, button, feedbackEl);
+        }
+    }
+
+    _fallbackCopy(text, button, feedbackEl) {
+        const input = document.createElement('input');
+        input.value = text;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        try {
+            document.execCommand('copy');
+            this._showCopiedFeedback(button, feedbackEl);
+        } catch (e) {
+            if (feedbackEl) feedbackEl.textContent = 'Copy failed';
+        }
+        document.body.removeChild(input);
+    }
+
+    _showCopiedFeedback(button, feedbackEl) {
+        if (button) button.textContent = 'Copied!';
+        if (feedbackEl) feedbackEl.textContent = 'Copied!';
+        setTimeout(() => {
+            if (button) button.textContent = '📋 Copy';
+            if (feedbackEl) feedbackEl.textContent = '';
+        }, 2000);
     }
 
     updateWeaponStatus(text) {
@@ -266,13 +333,13 @@ export class UIManager {
         const nameEl = document.getElementById('hud-player-name');
 
         if (healthFill) {
-            const pct = (player.health / player.maxHealth) * 100;
+            const pct = ((player.health ?? 100) / (player.maxHealth ?? 100)) * 100;
             healthFill.style.width = `${pct}%`;
             if (pct <= 25) healthFill.style.background = '#ff4444';
             else if (pct <= 50) healthFill.style.background = '#aaaaaa';
             else healthFill.style.background = '#ffffff';
         }
-        if (healthText) healthText.textContent = Math.ceil(player.health);
+        if (healthText) healthText.textContent = Math.ceil(player.health ?? 100);
         if (ammoEl && player.weapon) {
             ammoEl.textContent = `${player.getCurrentAmmo()} / ${player.getTotalAmmo()}`;
         }
@@ -280,14 +347,16 @@ export class UIManager {
             weaponNameEl.textContent = player.weapon.name;
         }
         if (setScoreEl && gameMode) {
-            setScoreEl.textContent = `${gameMode.setsWon[0]} - ${gameMode.setsWon[1]}`;
+            const setsWon = gameMode.setsWon ?? [0, 0];
+            setScoreEl.textContent = `${setsWon[0] ?? 0} - ${setsWon[1] ?? 0}`;
         }
         if (setNumberEl && gameMode) {
-            setNumberEl.textContent = `Set ${gameMode.currentSet + 1}`;
+            const currentSet = gameMode.currentSet ?? 0;
+            setNumberEl.textContent = `Set ${currentSet + 1}`;
         }
         if (pingEl) pingEl.textContent = `${ping || 0}ms`;
         if (fpsEl) fpsEl.textContent = `${fps || 0} FPS`;
-        if (nameEl) nameEl.textContent = player.name;
+        if (nameEl) nameEl.textContent = player.name ?? '';
     }
 
     showSetTransition(setNumber) {
@@ -311,10 +380,12 @@ export class UIManager {
         const overlay = document.createElement('div');
         overlay.className = 'match-end-overlay';
         overlay.id = 'match-end';
+        const score0 = (setsWon ?? [0, 0])[0] ?? 0;
+        const score1 = (setsWon ?? [0, 0])[1] ?? 0;
         overlay.innerHTML = `
             <div class="match-end-content">
                 <h2 class="match-end-title">${isWinner ? 'VICTORY' : 'DEFEAT'}</h2>
-                <p class="match-end-score">${setsWon[0]} - ${setsWon[1]}</p>
+                <p class="match-end-score">${score0} - ${score1}</p>
                 <p class="match-end-hint">Press SPACE to return to menu</p>
             </div>
         `;

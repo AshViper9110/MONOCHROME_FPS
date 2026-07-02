@@ -37,10 +37,10 @@ export class PeerManager {
         this._pendingMessages = [];
     }
 
-    async init() {
+    async init(customId) {
         return new Promise((resolve, reject) => {
             try {
-                this.peer = new Peer(undefined, PEER_CONFIG);
+                this.peer = new Peer(customId || undefined, PEER_CONFIG);
                 this.state = ConnectionState.CONNECTING;
 
                 this.peer.on('open', (id) => {

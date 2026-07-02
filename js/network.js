@@ -34,9 +34,9 @@ export class NetworkManager {
         this._gameCallbacks = {};
     }
 
-    async init() {
+    async init(customId) {
         try {
-            const id = await this.peer.init();
+            const id = await this.peer.init(customId);
             this._connected = true;
             this._setupHandlers();
             return id;
