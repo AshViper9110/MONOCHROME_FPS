@@ -58,6 +58,7 @@ export class MovementController {
     }
 
     update(dt) {
+        if (!this.input) return;
         const body = this.body;
         const input = this.input;
         const isGrounded = body.onGround;
@@ -138,6 +139,7 @@ export class MovementController {
     }
 
     _getMoveDirection() {
+        if (!this.input) return new Vec3();
         const input = this.input;
         const dir = new Vec3();
 

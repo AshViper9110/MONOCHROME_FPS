@@ -8,9 +8,6 @@ const COLOR_PLAYER = '#ffffff';
 const COLOR_ENEMY = '#333333';
 const COLOR_ENEMY_OUTLINE = '#ffffff';
 const COLOR_CROSSHAIR = '#ffffff';
-const COLOR_HUD = '#ffffff';
-const COLOR_DAMAGE = '#ff4444';
-const COLOR_ACCENT = '#ffffff';
 const COLOR_WALLRUN_SURFACE = '#2a2a2a';
 
 export class Renderer {
@@ -48,6 +45,7 @@ export class Renderer {
     }
 
     render(player, otherPlayers, bullets, particles, muzzleFlashes, effects, map) {
+        if (!player) return;
         this.clear();
         this._renderScene(player, map, otherPlayers, particles, bullets);
         this._renderMuzzleFlashes(muzzleFlashes, player);
@@ -55,10 +53,13 @@ export class Renderer {
     }
 
     _renderScene(player, map, otherPlayers, particles, bullets) {
+        if (!player) return;
+        const eyePos = player.getEyePosition();
+        if (!eyePos) return;
         const viewMatrix = createViewMatrix(
-            player.getEyePosition(),
-            player.yaw,
-            player.pitch
+            eyePos,
+            player.yaw ?? 0,
+            player.pitch ?? 0
         );
 
         const colliders = map ? map.colliders : [];
@@ -157,7 +158,6 @@ export class Renderer {
 
     _getBoxFaces(corners, projected, collider) {
         const faces = [];
-        const idx = [0, 1, 2, 3, 4, 5, 6, 7];
 
         const faceIndices = [
             [0, 1, 2, 3],
@@ -201,6 +201,7 @@ export class Renderer {
     }
 
     _projectPlayer(playerObj, viewMatrix) {
+        if (!playerObj || !playerObj.body || !playerObj.body.position) return null;
         const pos = playerObj.body.position;
         const projected = this._projectPoint(pos, viewMatrix);
         if (!projected) return null;
@@ -223,6 +224,7 @@ export class Renderer {
     }
 
     _projectParticle(particle, viewMatrix) {
+        if (!particle || !particle.position) return null;
         const projected = this._projectPoint(particle.position, viewMatrix);
         if (!projected) return null;
 
@@ -240,6 +242,7 @@ export class Renderer {
     }
 
     _projectBullet(bullet, viewMatrix) {
+        if (!bullet) return null;
         const pos = bullet.getPosition();
         if (!pos) return null;
         const projected = this._projectPoint(pos, viewMatrix);
@@ -259,9 +262,11 @@ export class Renderer {
 
     _renderMuzzleFlashes(muzzleFlashes, player) {
         if (!muzzleFlashes || muzzleFlashes.length === 0) return;
+        if (!player) return;
         const ctx = this.ctx;
         const flash = muzzleFlashes[muzzleFlashes.length - 1];
-        const intensity = flash.timer / flash.maxTimer;
+        if (!flash || !flash.direction) return;
+        const intensity = flash.timer / (flash.maxTimer || 1);
 
         ctx.save();
         ctx.globalAlpha = intensity * 0.6;
@@ -426,8 +431,8 @@ export class Renderer {
         const w = this.width;
         const h = this.height;
 
-        if (player.damageFlash > 0) {
-            ctx.fillStyle = `rgba(255, 0, 0, ${player.damageFlash * 0.3})`;
+        if ((player.damageFlash ?? 0) > 0) {
+            ctx.fillStyle = `rgba(255, 0, 0, ${(player.damageFlash ?? 0) * 0.3})`;
             ctx.fillRect(0, 0, w, h);
         }
 
@@ -467,10 +472,12 @@ export class Renderer {
     }
 
     _drawAmmo(player) {
-        if (!player.weapon) return;
+        if (!player || !player.weapon) return;
         const ctx = this.ctx;
         const w = this.width;
-        const ammoText = `${player.getCurrentAmmo()} / ${player.getTotalAmmo()}`;
+        const currentAmmo = (typeof player.getCurrentAmmo === 'function') ? player.getCurrentAmmo() : 0;
+        const totalAmmo = (typeof player.getTotalAmmo === 'function') ? player.getTotalAmmo() : 0;
+        const ammoText = `${currentAmmo} / ${totalAmmo}`;
 
         ctx.fillStyle = '#ffffff';
         ctx.font = '24px monospace';
@@ -487,12 +494,19 @@ export class Renderer {
 
     _drawSetScore(player, gameMode) {
         if (!gameMode) return;
-        if (!gameMode.setsWon) return;
-        if (!gameMode.playerIdOrder || gameMode.playerIdOrder.length < 2) return;
         const ctx = this.ctx;
         const w = this.width;
 
         const setsWon = gameMode.setsWon ?? [0, 0];
+        const playerOrder = gameMode.playerIdOrder ?? [];
+        if (!Array.isArray(playerOrder) || playerOrder.length < 2) {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '32px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('0 - 0', w / 2, 40);
+            return;
+        }
+
         const setsText = `${setsWon[0] ?? 0} - ${setsWon[1] ?? 0}`;
         ctx.fillStyle = '#ffffff';
         ctx.font = '32px monospace';
@@ -537,13 +551,14 @@ export class Renderer {
     }
 
     _drawReloadBar(player) {
-        if (!player.reloading) return;
+        if (!player || !player.reloading || !player.weapon) return;
         const ctx = this.ctx;
         const barWidth = 100;
         const barHeight = 4;
         const x = this.width - 30 - barWidth;
         const y = this.height - 45;
-        const progress = 1 - (player.reloadTimer / player.weapon.reloadTime);
+        const reloadTime = player.weapon.reloadTime || 1;
+        const progress = 1 - (player.reloadTimer ?? 0) / reloadTime;
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.fillRect(x, y, barWidth, barHeight);
@@ -568,10 +583,10 @@ export class Renderer {
         const isWinner = gameMode.winner === player.id;
         ctx.fillText(isWinner ? 'VICTORY' : 'DEFEAT', w / 2, h / 2 - 40);
 
-        const setsWon = gameMode.setsWon ?? [0, 0];
+        const setsWon = Array.isArray(gameMode.setsWon) ? gameMode.setsWon : [0, 0];
         ctx.font = '18px monospace';
         ctx.fillStyle = '#aaaaaa';
-        ctx.fillText(`Final Score: ${setsWon[0]} - ${setsWon[1]}`, w / 2, h / 2 + 20);
+        ctx.fillText(`Final Score: ${setsWon[0] ?? 0} - ${setsWon[1] ?? 0}`, w / 2, h / 2 + 20);
 
         ctx.font = '14px monospace';
         ctx.fillText('Press SPACE to return to menu', w / 2, h / 2 + 60);

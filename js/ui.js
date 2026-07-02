@@ -1,4 +1,3 @@
-import { GamePhase } from './gamemode.js';
 import { WEAPON_DEFINITIONS } from './weapon.js';
 
 export class UIManager {

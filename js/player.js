@@ -145,7 +145,9 @@ export class Player {
 
     update(dt) {
         if (this.isDead) return;
-        this.movement.update(dt);
+        if (this.isLocal) {
+            this.movement.update(dt);
+        }
         this.updateReload(dt);
         this.damageFlash = Math.max(0, this.damageFlash - dt);
         this.muzzleFlashTimer = Math.max(0, this.muzzleFlashTimer - dt);

@@ -183,7 +183,7 @@ export class Game {
     async hostGame() {
         try {
             const roomCode = this.roomCodeManager.generateCode();
-            const customPeerId = this.roomCodeManager.getCurrentPeerId();
+            const customPeerId = `mono-${roomCode}`;
             const peerId = await this.network.init(customPeerId);
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
@@ -200,7 +200,7 @@ export class Game {
     async joinGame(roomCode) {
         try {
             const peerId = await this.network.init();
-            const targetPeerId = this.roomCodeManager.getPeerId(roomCode);
+            const targetPeerId = `mono-${roomCode}`;
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
             this.network.connect(targetPeerId);
@@ -524,11 +524,13 @@ export class Game {
             this._fpsTimer = 0;
         }
 
-        if (this.ui && this.localPlayer) {
+        if (this.ui && this.localPlayer && this.gamemode &&
+            (this.gamemode.phase === GamePhase.FIGHTING ||
+             this.gamemode.phase === GamePhase.SET_TRANSITION)) {
             this.ui.updateHUD(
                 this.localPlayer,
                 this.gamemode,
-                this.network.getPing(),
+                this.network ? this.network.getPing() : 0,
                 this._fps
             );
         }
