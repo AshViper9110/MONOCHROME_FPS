@@ -1,4 +1,4 @@
-import { Vec3, createViewMatrix, DEG2RAD, clamp } from './util.js';
+import { Vec3, DEG2RAD, clamp } from './util.js';
 
 const COLOR_BG = '#000000';
 const COLOR_WALL = '#202020';
@@ -44,23 +44,17 @@ export class Renderer {
         this._depthBuffer.fill(Infinity);
     }
 
-    render(player, otherPlayers, bullets, particles, muzzleFlashes, effects, map) {
-        if (!player) return;
+    render(camera, allPlayers, bullets, particles, muzzleFlashes, effects, map) {
+        if (!camera) return;
         this.clear();
-        this._renderScene(player, map, otherPlayers, particles, bullets);
-        this._renderMuzzleFlashes(muzzleFlashes, player);
-        this._renderCrosshair(player);
+        this._renderScene(camera, map, allPlayers, particles, bullets);
+        this._renderMuzzleFlashes(muzzleFlashes);
+        this._renderCrosshair();
     }
 
-    _renderScene(player, map, otherPlayers, particles, bullets) {
-        if (!player) return;
-        const eyePos = player.getEyePosition();
-        if (!eyePos) return;
-        const viewMatrix = createViewMatrix(
-            eyePos,
-            player.yaw ?? 0,
-            player.pitch ?? 0
-        );
+    _renderScene(camera, map, allPlayers, particles, bullets) {
+        if (!camera) return;
+        const viewMatrix = camera.getViewMatrix();
 
         const colliders = map ? map.colliders : [];
         const visibleObjects = [];
@@ -70,7 +64,7 @@ export class Renderer {
             if (obj) visibleObjects.push(obj);
         }
 
-        for (const other of otherPlayers) {
+        for (const other of allPlayers) {
             if (other.isDead) continue;
             const sprite = this._projectPlayer(other, viewMatrix);
             if (sprite) visibleObjects.push(sprite);
@@ -260,9 +254,8 @@ export class Renderer {
         };
     }
 
-    _renderMuzzleFlashes(muzzleFlashes, player) {
+    _renderMuzzleFlashes(muzzleFlashes) {
         if (!muzzleFlashes || muzzleFlashes.length === 0) return;
-        if (!player) return;
         const ctx = this.ctx;
         const flash = muzzleFlashes[muzzleFlashes.length - 1];
         if (!flash || !flash.direction) return;
@@ -394,7 +387,7 @@ export class Renderer {
         ctx.globalAlpha = 1;
     }
 
-    _renderCrosshair(player) {
+    _renderCrosshair() {
         const ctx = this.ctx;
         const cx = this.halfWidth;
         const cy = this.halfHeight;
@@ -425,146 +418,13 @@ export class Renderer {
         ctx.globalAlpha = 1;
     }
 
-    renderHUD(player, otherPlayers, gameMode, networkStats) {
+    renderDamageFlash(player) {
         if (!player) return;
-        const ctx = this.ctx;
-        const w = this.width;
-        const h = this.height;
-
         if ((player.damageFlash ?? 0) > 0) {
+            const ctx = this.ctx;
             ctx.fillStyle = `rgba(255, 0, 0, ${(player.damageFlash ?? 0) * 0.3})`;
-            ctx.fillRect(0, 0, w, h);
+            ctx.fillRect(0, 0, this.width, this.height);
         }
-
-        this._drawHealthBar(player);
-        this._drawAmmo(player);
-        this._drawSetScore(player, gameMode);
-        this._drawNetworkStats(networkStats);
-        this._drawWeaponName(player);
-        this._drawReloadBar(player);
-    }
-
-    _drawHealthBar(player) {
-        if (!player) return;
-        const ctx = this.ctx;
-        const barWidth = 200;
-        const barHeight = 20;
-        const x = 20;
-        const y = this.height - 50;
-        const health = player.health ?? 100;
-        const maxHealth = player.maxHealth ?? 100;
-        const healthPercent = maxHealth > 0 ? health / maxHealth : 1;
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
-
-        ctx.fillStyle = healthPercent > 0.5 ? '#ffffff' : healthPercent > 0.25 ? '#aaaaaa' : '#ff4444';
-        ctx.fillRect(x, y, barWidth * healthPercent, barHeight);
-
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x - 2, y - 2, barWidth + 4, barHeight + 4);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(`HP ${Math.ceil(health)}`, x + 5, y + 15);
-    }
-
-    _drawAmmo(player) {
-        if (!player || !player.weapon) return;
-        const ctx = this.ctx;
-        const w = this.width;
-        const currentAmmo = (typeof player.getCurrentAmmo === 'function') ? player.getCurrentAmmo() : 0;
-        const totalAmmo = (typeof player.getTotalAmmo === 'function') ? player.getTotalAmmo() : 0;
-        const ammoText = `${currentAmmo} / ${totalAmmo}`;
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '24px monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText(ammoText, w - 30, this.height - 40);
-
-        if (player.reloading) {
-            ctx.fillStyle = '#aaaaaa';
-            ctx.font = '14px monospace';
-            ctx.textAlign = 'right';
-            ctx.fillText('RELOADING...', w - 30, this.height - 60);
-        }
-    }
-
-    _drawSetScore(player, gameMode) {
-        if (!gameMode) return;
-        const ctx = this.ctx;
-        const w = this.width;
-
-        const setsWon = gameMode.setsWon ?? [0, 0];
-        const playerOrder = gameMode.playerIdOrder ?? [];
-        if (!Array.isArray(playerOrder) || playerOrder.length < 2) {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '32px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('0 - 0', w / 2, 40);
-            return;
-        }
-
-        const setsText = `${setsWon[0] ?? 0} - ${setsWon[1] ?? 0}`;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '32px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(setsText, w / 2, 40);
-
-        const currentSet = gameMode.currentSet ?? 0;
-        ctx.font = '12px monospace';
-        ctx.fillText(`Set ${currentSet + 1}`, w / 2, 58);
-    }
-
-    _drawNetworkStats(stats) {
-        if (!stats) return;
-        const ctx = this.ctx;
-
-        ctx.fillStyle = '#666666';
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'right';
-
-        let y = 20;
-        if (stats.fps) {
-            ctx.fillText(`FPS: ${stats.fps}`, this.width - 20, y);
-            y += 14;
-        }
-        if (stats.ping !== undefined) {
-            ctx.fillText(`Ping: ${stats.ping}ms`, this.width - 20, y);
-            y += 14;
-        }
-        if (stats.connected !== undefined) {
-            ctx.fillText(`Peer: ${stats.connected ? 'Connected' : 'Disconnected'}`, this.width - 20, y);
-        }
-    }
-
-    _drawWeaponName(player) {
-        if (!player.weapon) return;
-        const ctx = this.ctx;
-
-        ctx.fillStyle = '#888888';
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(player.weapon.name, 20, this.height - 70);
-    }
-
-    _drawReloadBar(player) {
-        if (!player || !player.reloading || !player.weapon) return;
-        const ctx = this.ctx;
-        const barWidth = 100;
-        const barHeight = 4;
-        const x = this.width - 30 - barWidth;
-        const y = this.height - 45;
-        const reloadTime = player.weapon.reloadTime || 1;
-        const progress = 1 - (player.reloadTimer ?? 0) / reloadTime;
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(x, y, barWidth, barHeight);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x, y, barWidth * progress, barHeight);
     }
 
     renderWinScreen(player, gameMode) {

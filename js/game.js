@@ -10,6 +10,7 @@ import { GameMode, GamePhase } from './gamemode.js';
 import { UIManager } from './ui.js';
 import { WEAPON_DEFINITIONS, Weapon } from './weapon.js';
 import { Vec3, clamp } from './util.js';
+import { CameraController } from './camera.js';
 import { RoomCodeManager } from './roomcode.js';
 
 const MOUSE_SENSITIVITY = 0.002;
@@ -40,6 +41,7 @@ export class Game {
         this._fps = 0;
         this._frameCount = 0;
         this._fpsTimer = 0;
+        this.camera = null;
         this._initialized = false;
         this._lastPhase = null;
         this.roomCodeManager = new RoomCodeManager();
@@ -65,6 +67,7 @@ export class Game {
             throw new Error(`Map/Physics: ${e.message}`);
         }
 
+        this.camera = new CameraController();
         this.bulletManager = new BulletManager();
         this.effects = new EffectsManager();
         this.gamemode = new GameMode();
@@ -319,7 +322,8 @@ export class Game {
         if (this.gamemode.phase !== GamePhase.FIGHTING) return;
         if (!this.localPlayer || this.localPlayer.isDead) return;
 
-        const projectiles = this.localPlayer.fire(performance.now() / 1000);
+        const fireDir = this.camera ? this.camera.getForward() : this.localPlayer.getForward();
+        const projectiles = this.localPlayer.fire(performance.now() / 1000, fireDir);
         if (projectiles) {
             if (this.bulletManager) {
                 this.bulletManager.addBullets(projectiles);
@@ -327,7 +331,7 @@ export class Game {
             if (this.localPlayer.weapon && this.effects) {
                 this.effects.spawnMuzzleFlash(
                     this.localPlayer.getEyePosition(),
-                    this.localPlayer.getForward()
+                    fireDir
                 );
             }
             if (this.network) {
@@ -365,6 +369,10 @@ export class Game {
         if (this.physics) {
             this.physics.update(dt);
         }
+        if (this.camera) {
+            this.camera.update(dt, this.localPlayer);
+        }
+
         if (this.bulletManager) {
             this.bulletManager.update(dt, this.physics, this.allPlayers);
         }
@@ -393,8 +401,10 @@ export class Game {
 
         const mouseDelta = this.input.getMouseDelta();
         this.localPlayer.yaw -= mouseDelta.dx * MOUSE_SENSITIVITY;
-        this.localPlayer.pitch -= mouseDelta.dy * MOUSE_SENSITIVITY;
-        this.localPlayer.pitch = clamp(this.localPlayer.pitch, -Math.PI / 2.2, Math.PI / 2.2);
+        if (this.camera) {
+            this.camera.pitch -= mouseDelta.dy * MOUSE_SENSITIVITY;
+            this.camera.pitch = clamp(this.camera.pitch, -Math.PI / 2.2, Math.PI / 2.2);
+        }
 
         if (this.input.wasKeyPressed('KeyR')) {
             this._handleReload();
@@ -520,6 +530,9 @@ export class Game {
         if (this.effects) {
             this.effects.clear();
         }
+        if (this.camera) {
+            this.camera.reset();
+        }
         this.localPlayer = null;
         this.remotePlayer = null;
         this.allPlayers = [];
@@ -588,9 +601,11 @@ export class Game {
 
             const otherPlayers = this.remotePlayer ? [this.remotePlayer] : [];
 
+            const allVisible = [this.localPlayer, ...otherPlayers];
+
             this.renderer.render(
-                this.localPlayer,
-                otherPlayers,
+                this.camera,
+                allVisible,
                 this.bulletManager ? this.bulletManager.getActiveBullets() : [],
                 this.effects ? this.effects.getParticles() : [],
                 this.effects ? this.effects.getMuzzleFlashes() : [],
@@ -598,19 +613,7 @@ export class Game {
                 this.map
             );
 
-            if (this.gamemode.phase === GamePhase.FIGHTING ||
-                this.gamemode.phase === GamePhase.SET_TRANSITION) {
-                this.renderer.renderHUD(
-                    this.localPlayer,
-                    [],
-                    this.gamemode,
-                    {
-                        fps: this._fps,
-                        ping: this.network ? this.network.getPing() : 0,
-                        connected: this.network ? this.network.isConnected() : false,
-                    }
-                );
-            }
+            this.renderer.renderDamageFlash(this.localPlayer);
 
             if (this.gamemode.phase === GamePhase.MATCH_END) {
                 this.renderer.renderWinScreen(this.localPlayer, this.gamemode);

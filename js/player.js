@@ -105,12 +105,13 @@ export class Player {
         return true;
     }
 
-    fire(time) {
+    fire(time, dir) {
         if (!this.canFire(time)) return null;
         this.lastFireTime = time;
         this.ammo[this.weapon.name]--;
         this.muzzleFlashTimer = 0.05;
-        return this.weapon.createProjectile(this.getEyePosition(), this.getForward(), this.id);
+        const fireDir = dir || this.getForward();
+        return this.weapon.createProjectile(this.getEyePosition(), fireDir, this.id);
     }
 
     startReload() {
