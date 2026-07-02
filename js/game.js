@@ -280,6 +280,8 @@ export class Game {
         console.log('Starting round');
         this.ui.showHUD();
         this.ui.hideScreen('weaponSelect');
+        const wsEl = document.getElementById('screen-weapon-select');
+        if (wsEl) wsEl.style.display = 'none';
         this.gamemode.currentSet = setNumber;
         this.gamemode.startSet();
         this._spawnPlayers();
@@ -522,6 +524,7 @@ export class Game {
         this.remotePlayer = null;
         this.allPlayers = [];
         this.weaponConfirmed = false;
+        this._lastPhase = null;
         this._running = true;
         this._lastTime = performance.now();
         if (this.ui) {
@@ -533,11 +536,24 @@ export class Game {
     _updatePhaseUI() {
         if (!this.gamemode) return;
         const phase = this.gamemode.phase;
-        if (phase === this._lastPhase) return;
+        if (phase === this._lastPhase) {
+            if (phase !== GamePhase.WEAPON_SELECT) {
+                const wsEl = document.getElementById('screen-weapon-select');
+                if (wsEl && wsEl.style.display !== 'none') {
+                    console.log('Force-hiding weapon select (phase=' + phase + ')');
+                    wsEl.style.display = 'none';
+                }
+            }
+            return;
+        }
+        console.log('Phase changed: ' + this._lastPhase + ' -> ' + phase);
         this._lastPhase = phase;
 
         if (phase !== GamePhase.WEAPON_SELECT) {
+            console.log('Hiding weapon select on phase change');
             this.ui.hideScreen('weaponSelect');
+            const wsEl = document.getElementById('screen-weapon-select');
+            if (wsEl) wsEl.style.display = 'none';
         }
     }
 
