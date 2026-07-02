@@ -1,5 +1,4 @@
 import { InputManager } from './input.js';
-import { AudioManager } from './audio.js';
 import { Player } from './player.js';
 import { Renderer } from './renderer.js';
 import { MapData } from './map.js';
@@ -19,7 +18,6 @@ export class Game {
         this.canvas = null;
         this.input = null;
         this.renderer = null;
-        this.audio = null;
         this.physics = null;
         this.bulletManager = null;
         this.effects = null;
@@ -45,52 +43,45 @@ export class Game {
     }
 
     async initialize() {
-        try {
-            this.canvas = document.getElementById('game-canvas');
-            if (!this.canvas) {
-                throw new Error('DOM: #game-canvas not found');
-            }
-
-            this.input = new InputManager();
-            this.renderer = new Renderer(this.canvas);
-            if (!this.renderer || !this.renderer.ctx) {
-                throw new Error('Renderer: failed to create 2D context');
-            }
-
-            this.map = new MapData();
-            try {
-                this.physics = new PhysicsWorld();
-                this.physics.setColliders(this.map.build());
-            } catch (e) {
-                throw new Error(`Map/Physics: ${e.message}`);
-            }
-
-            this.bulletManager = new BulletManager();
-            this.effects = new EffectsManager();
-
-            this.gamemode = new GameMode();
-
-            try {
-                this.network = new NetworkManager();
-            } catch (e) {
-                throw new Error(`Network: ${e.message}`);
-            }
-
-            try {
-                this.ui = new UIManager(this);
-            } catch (e) {
-                throw new Error(`UI: ${e.message}`);
-            }
-
-            this.audio = new AudioManager();
-
-            this._setupInput();
-            this._setupNetwork();
-
-            this._initialized = true;
-        } catch (e) {
-            throw e;
+        this.canvas = document.getElementById('game-canvas');
+        if (!this.canvas) {
+            throw new Error('DOM: #game-canvas not found');
         }
+
+        this.input = new InputManager();
+        this.renderer = new Renderer(this.canvas);
+        if (!this.renderer || !this.renderer.ctx) {
+            throw new Error('Renderer: failed to create 2D context');
+        }
+
+        try {
+            this.map = new MapData();
+            this.physics = new PhysicsWorld();
+            this.physics.setColliders(this.map.build());
+        } catch (e) {
+            throw new Error(`Map/Physics: ${e.message}`);
+        }
+
+        this.bulletManager = new BulletManager();
+        this.effects = new EffectsManager();
+        this.gamemode = new GameMode();
+
+        try {
+            this.network = new NetworkManager();
+        } catch (e) {
+            throw new Error(`Network: ${e.message}`);
+        }
+
+        try {
+            this.ui = new UIManager(this);
+        } catch (e) {
+            throw new Error(`UI: ${e.message}`);
+        }
+
+        this._setupInput();
+        this._setupNetwork();
+
+        this._initialized = true;
     }
 
     showTitle() {
@@ -163,20 +154,16 @@ export class Game {
                         new Vec3(data.origin.x, data.origin.y, data.origin.z),
                         new Vec3(data.direction.x, data.direction.y, data.direction.z)
                     );
-                    this.audio.play('rifle_fire', 0.5);
                 }
             },
             onRemoteHit: (data) => {
                 if (this.localPlayer && data.victimId === this.localPlayer.id) {
                     this.localPlayer.damageFlash = 0.2;
-                    this.audio.play('hit', 0.5);
                 }
             },
             onRemoteKill: (data) => {
-                this.audio.play('kill', 0.7);
                 if (this.localPlayer && data.victimId === this.localPlayer.id) {
                     this.effects.spawnDeathEffect(this.localPlayer.body.position);
-                    this.audio.play('death', 0.6);
                 }
             },
             onSetWin: (data) => {
@@ -185,24 +172,12 @@ export class Game {
             onMatchEnd: (data) => {
                 this.gamemode.winner = data.winnerId;
                 this.gamemode.phase = GamePhase.MATCH_END;
-                this.audio.play('victory', 0.8);
             },
         });
     }
 
-    async _initAudio() {
-        try {
-            this.audio.init();
-            this.audio.loadAll();
-        } catch (e) {
-            console.warn('Audio init failed (non-fatal):', e.message);
-        }
-    }
-
     async hostGame() {
         try {
-            await this._initAudio();
-
             const peerId = await this.network.init();
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
@@ -218,8 +193,6 @@ export class Game {
 
     async joinGame(remotePeerId) {
         try {
-            await this._initAudio();
-
             const peerId = await this.network.init();
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
@@ -304,7 +277,6 @@ export class Game {
         if (projectiles) {
             this.bulletManager.addBullets(projectiles);
             if (this.localPlayer.weapon) {
-                this.audio.play('rifle_fire', 0.4);
                 this.effects.spawnMuzzleFlash(
                     this.localPlayer.getEyePosition(),
                     this.localPlayer.getForward()
@@ -318,7 +290,6 @@ export class Game {
         if (!this.localPlayer || this.localPlayer.isDead) return;
         this.localPlayer.startReload();
         if (this.localPlayer.reloading) {
-            this.audio.play('reload', 0.5);
             this.effects.spawnReloadEffect(this.localPlayer.getEyePosition());
         }
     }
@@ -424,14 +395,12 @@ export class Game {
                 if (isKill) {
                     this.gamemode.onPlayerDeath(victim, this.localPlayer, bullet.weaponName);
                     this.network.sendKillEvent(killerId, victim.id, bullet.weaponName);
-                    this.audio.play('kill', 0.7);
                     this.effects.spawnDeathEffect(victim.body.position);
 
                     if (victim.id === this.network.getRemotePeerId()) {
                         this.network.sendSetWin(this.localPlayer.id, this.gamemode.currentSet);
                     }
                 } else {
-                    this.audio.play('hit', 0.5);
                     this.effects.spawnHitEffect(
                         bullet.hitPosition || victim.body.position,
                         bullet.hitNormal || new Vec3(0, 1, 0)
@@ -443,13 +412,11 @@ export class Game {
     }
 
     _onLocalPlayerDeath() {
-        this.audio.play('death', 0.6);
         this.effects.spawnDeathEffect(this.localPlayer.body.position);
         this.input.exitPointerLock();
     }
 
     _onRemotePlayerDeath() {
-        this.audio.play('kill', 0.7);
         this.effects.spawnDeathEffect(this.remotePlayer.body.position);
     }
 
