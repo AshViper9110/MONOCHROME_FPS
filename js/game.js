@@ -10,24 +10,23 @@ import { NetworkManager } from './network.js';
 import { GameMode, GamePhase } from './gamemode.js';
 import { UIManager } from './ui.js';
 import { WEAPON_DEFINITIONS, Weapon } from './weapon.js';
-import { Vec3, clamp, FRAME_TIME } from './util.js';
+import { Vec3, clamp } from './util.js';
 
-const MOVEMENT_SPEED = 0.002;
 const MOUSE_SENSITIVITY = 0.002;
 
 export class Game {
     constructor() {
-        this.canvas = document.getElementById('game-canvas');
-        this.input = new InputManager();
-        this.renderer = new Renderer(this.canvas);
-        this.audio = new AudioManager();
-        this.physics = new PhysicsWorld();
-        this.bulletManager = new BulletManager();
-        this.effects = new EffectsManager();
-        this.network = new NetworkManager();
-        this.gamemode = new GameMode();
-        this.ui = new UIManager(this);
-        this.map = new MapData();
+        this.canvas = null;
+        this.input = null;
+        this.renderer = null;
+        this.audio = null;
+        this.physics = null;
+        this.bulletManager = null;
+        this.effects = null;
+        this.network = null;
+        this.gamemode = null;
+        this.ui = null;
+        this.map = null;
 
         this.localPlayer = null;
         this.remotePlayer = null;
@@ -37,37 +36,87 @@ export class Game {
         this.weaponConfirmed = false;
 
         this._lastTime = 0;
-        this._accumulator = 0;
         this._running = false;
         this._requestId = null;
         this._fps = 0;
         this._frameCount = 0;
         this._fpsTimer = 0;
+        this._initialized = false;
+    }
 
-        this._setupInput();
-        this._setupNetwork();
+    async initialize() {
+        try {
+            this.canvas = document.getElementById('game-canvas');
+            if (!this.canvas) {
+                throw new Error('DOM: #game-canvas not found');
+            }
+
+            this.input = new InputManager();
+            this.renderer = new Renderer(this.canvas);
+            if (!this.renderer || !this.renderer.ctx) {
+                throw new Error('Renderer: failed to create 2D context');
+            }
+
+            this.map = new MapData();
+            try {
+                this.physics = new PhysicsWorld();
+                this.physics.setColliders(this.map.build());
+            } catch (e) {
+                throw new Error(`Map/Physics: ${e.message}`);
+            }
+
+            this.bulletManager = new BulletManager();
+            this.effects = new EffectsManager();
+
+            this.gamemode = new GameMode();
+
+            try {
+                this.network = new NetworkManager();
+            } catch (e) {
+                throw new Error(`Network: ${e.message}`);
+            }
+
+            try {
+                this.ui = new UIManager(this);
+            } catch (e) {
+                throw new Error(`UI: ${e.message}`);
+            }
+
+            this.audio = new AudioManager();
+
+            this._setupInput();
+            this._setupNetwork();
+
+            this._initialized = true;
+        } catch (e) {
+            throw e;
+        }
+    }
+
+    showTitle() {
+        if (!this._initialized) return;
+        this.ui.showScreen('title');
     }
 
     _setupInput() {
+        if (!this.canvas) return;
+
         this.canvas.addEventListener('click', () => {
-            if (this.gamemode.phase === GamePhase.FIGHTING) {
+            if (this.gamemode && this.gamemode.phase === GamePhase.FIGHTING) {
                 this.input.requestPointerLock(this.canvas);
             }
         });
 
-        this.input.onPointerLockChange((locked) => {
-            if (!locked && this.gamemode.phase === GamePhase.FIGHTING) {
-            }
-        });
-
         this.canvas.addEventListener('mousedown', (e) => {
-            if (this.gamemode.phase === GamePhase.FIGHTING && e.button === 0) {
+            if (this.gamemode && this.gamemode.phase === GamePhase.FIGHTING && e.button === 0) {
                 this._handleFire();
             }
         });
     }
 
     _setupNetwork() {
+        if (!this.network) return;
+
         this.network.setCallbacks({
             onConnected: (remoteId) => {
                 this.ui.showMessage('Connected to opponent!');
@@ -118,14 +167,14 @@ export class Game {
                 }
             },
             onRemoteHit: (data) => {
-                if (data.victimId === this.localPlayer.id) {
+                if (this.localPlayer && data.victimId === this.localPlayer.id) {
                     this.localPlayer.damageFlash = 0.2;
                     this.audio.play('hit', 0.5);
                 }
             },
             onRemoteKill: (data) => {
                 this.audio.play('kill', 0.7);
-                if (data.victimId === this.localPlayer.id) {
+                if (this.localPlayer && data.victimId === this.localPlayer.id) {
                     this.effects.spawnDeathEffect(this.localPlayer.body.position);
                     this.audio.play('death', 0.6);
                 }
@@ -141,31 +190,46 @@ export class Game {
         });
     }
 
+    async _initAudio() {
+        try {
+            this.audio.init();
+            this.audio.loadAll();
+        } catch (e) {
+            console.warn('Audio init failed (non-fatal):', e.message);
+        }
+    }
+
     async hostGame() {
         try {
+            await this._initAudio();
+
             const peerId = await this.network.init();
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
-            this._initGame();
+            this._startGameLoop();
             this.ui.showScreen('lobby');
             this.ui.updateLobby(peerId, [this.localPlayer]);
             this.ui.showMessage('Waiting for opponent to join...', 0);
         } catch (err) {
+            console.error('Host game failed:', err);
             this.ui.showMessage(`Error: ${err.message}`);
         }
     }
 
     async joinGame(remotePeerId) {
         try {
+            await this._initAudio();
+
             const peerId = await this.network.init();
             this.localPlayer = new Player(peerId, this.playerName);
             this.network.setLocalPlayerId(peerId);
-            this._initGame();
             this.network.connect(remotePeerId);
+            this._startGameLoop();
             this.ui.showScreen('lobby');
             this.ui.updateLobby(peerId, [this.localPlayer]);
             this.ui.showMessage('Connecting...', 0);
         } catch (err) {
+            console.error('Join game failed:', err);
             this.ui.showMessage(`Error: ${err.message}`);
         }
     }
@@ -174,13 +238,8 @@ export class Game {
         this.playerName = name || 'Player';
     }
 
-    _initGame() {
-        this.localPlayer.initLocal(this.input);
-        this.physics.setColliders(this.map.build());
-
-        this.audio.init();
-        this.audio.loadAll();
-
+    _startGameLoop() {
+        if (this._running) return;
         this._running = true;
         this._lastTime = performance.now();
         this._loop(this._lastTime);
@@ -282,7 +341,7 @@ export class Game {
 
         this._checkBulletHits();
 
-        if (this.network.isConnected()) {
+        if (this.network && this.network.isConnected()) {
             this.network.update(dt, this.localPlayer);
         }
 
@@ -354,11 +413,11 @@ export class Game {
         for (const bullet of this.bulletManager.getActiveBullets()) {
             if (!bullet.alive) continue;
             if (bullet.hitEntity) {
-                if (bullet.hitEntity.id !== this.localPlayer.id && bullet.hitEntity.id !== this.remotePlayer?.id) {
+                const victim = bullet.hitEntity;
+                if (victim.id !== this.localPlayer.id && victim.id !== this.remotePlayer?.id) {
                     continue;
                 }
 
-                const victim = bullet.hitEntity;
                 const killerId = bullet.ownerId;
                 const isKill = victim.isDead;
 
@@ -399,14 +458,28 @@ export class Game {
         if (this._requestId) {
             cancelAnimationFrame(this._requestId);
         }
-        this.network.disconnect();
-        this.gamemode.reset();
-        this.ui.cleanup();
-        this.ui = new UIManager(this);
-        this.bulletManager.clear();
-        this.effects.clear();
+        if (this.network) {
+            this.network.disconnect();
+        }
+        if (this.gamemode) {
+            this.gamemode.reset();
+        }
+        if (this.ui) {
+            this.ui.cleanup();
+        }
+        if (this.bulletManager) {
+            this.bulletManager.clear();
+        }
+        if (this.effects) {
+            this.effects.clear();
+        }
+        this.localPlayer = null;
+        this.remotePlayer = null;
+        this.allPlayers = [];
+        this.weaponConfirmed = false;
         this._running = true;
         this._lastTime = performance.now();
+        this.ui.showScreen('title');
         this._loop(this._lastTime);
     }
 
@@ -419,16 +492,18 @@ export class Game {
             this._fpsTimer = 0;
         }
 
-        this.ui.updateHUD(
-            this.localPlayer,
-            this.gamemode,
-            this.network.getPing(),
-            this._fps
-        );
+        if (this.ui && this.localPlayer) {
+            this.ui.updateHUD(
+                this.localPlayer,
+                this.gamemode,
+                this.network.getPing(),
+                this._fps
+            );
+        }
     }
 
     render() {
-        if (!this.localPlayer) return;
+        if (!this.localPlayer || !this.renderer) return;
 
         if (this.gamemode.phase === GamePhase.FIGHTING ||
             this.gamemode.phase === GamePhase.SET_END ||
