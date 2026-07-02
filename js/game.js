@@ -186,6 +186,7 @@ export class Game {
             const customPeerId = `mono-${roomCode}`;
             const peerId = await this.network.init(customPeerId);
             this.localPlayer = new Player(peerId, this.playerName);
+            this.localPlayer.initLocal(this.input);
             this.network.setLocalPlayerId(peerId);
             this._startGameLoop();
             this.ui.showScreen('lobby');
@@ -202,6 +203,7 @@ export class Game {
             const peerId = await this.network.init();
             const targetPeerId = `mono-${roomCode}`;
             this.localPlayer = new Player(peerId, this.playerName);
+            this.localPlayer.initLocal(this.input);
             this.network.setLocalPlayerId(peerId);
             this.network.connect(targetPeerId);
             this._startGameLoop();
