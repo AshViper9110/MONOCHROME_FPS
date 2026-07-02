@@ -84,7 +84,11 @@ export class InputManager {
     }
 
     requestPointerLock(element) {
-        element.requestPointerLock();
+        try {
+            element.requestPointerLock();
+        } catch (e) {
+            console.warn('Pointer lock request failed:', e.message);
+        }
     }
 
     exitPointerLock() {

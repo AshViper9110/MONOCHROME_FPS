@@ -490,6 +490,7 @@ export class Game {
 
             this.renderer.renderHUD(
                 this.localPlayer,
+                [],
                 this.gamemode,
                 {
                     fps: this._fps,

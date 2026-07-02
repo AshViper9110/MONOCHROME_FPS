@@ -483,6 +483,7 @@ export class Renderer {
 
     _drawSetScore(player, gameMode) {
         if (!gameMode) return;
+        if (!gameMode.setsWon) return;
         const ctx = this.ctx;
         const w = this.width;
 
